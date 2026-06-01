@@ -1,0 +1,455 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>문서 번역기 · Document Translator</title>
+
+<!-- Libraries for reading file types -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Gowun+Batang:wght@400;700&family=Fraunces:opsz,wght@9..144,400;9..144,600&family=Spline+Sans:wght@400;500;600&display=swap');
+
+  :root{
+    --bg:#f4f1ea;
+    --paper:#fdfcf8;
+    --ink:#2c2a26;
+    --ink-soft:#6b6760;
+    --line:#dcd6c8;
+    --accent:#3f6b54;
+    --accent-deep:#2c4d3c;
+    --accent-soft:#e7ede8;
+    --gold:#a8843a;
+    --danger:#9c4a3a;
+    --radius:14px;
+    --shadow:0 1px 2px rgba(44,42,38,.06), 0 8px 24px rgba(44,42,38,.08);
+  }
+
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100%}
+  body{
+    background:
+      radial-gradient(circle at 12% 10%, rgba(63,107,84,.07), transparent 45%),
+      radial-gradient(circle at 88% 88%, rgba(168,132,58,.07), transparent 45%),
+      var(--bg);
+    color:var(--ink);
+    font-family:'Spline Sans', 'Apple SD Gothic Neo', sans-serif;
+    line-height:1.6;
+    -webkit-font-smoothing:antialiased;
+  }
+
+  .wrap{max-width:920px;margin:0 auto;padding:48px 24px 80px}
+
+  /* ---- Header ---- */
+  header{text-align:center;margin-bottom:36px}
+  .kicker{
+    font-family:'Spline Sans',sans-serif;
+    text-transform:uppercase;letter-spacing:.28em;font-size:11px;
+    color:var(--gold);font-weight:600;margin-bottom:10px;
+  }
+  h1{
+    font-family:'Fraunces',serif;font-weight:600;
+    font-size:clamp(30px,5vw,46px);line-height:1.1;
+    color:var(--accent-deep);
+  }
+  h1 .ko{font-family:'Gowun Batang',serif;display:block;font-size:.62em;margin-top:6px;color:var(--ink-soft);font-weight:400}
+  .sub{margin-top:14px;color:var(--ink-soft);font-size:15px}
+
+  /* ---- Card ---- */
+  .card{
+    background:var(--paper);
+    border:1px solid var(--line);
+    border-radius:var(--radius);
+    box-shadow:var(--shadow);
+    padding:26px;
+    margin-bottom:22px;
+  }
+  .card-label{
+    font-family:'Fraunces',serif;font-size:13px;font-weight:600;
+    text-transform:uppercase;letter-spacing:.12em;color:var(--accent);
+    display:flex;align-items:center;gap:8px;margin-bottom:16px;
+  }
+  .card-label .num{
+    width:22px;height:22px;border-radius:50%;
+    background:var(--accent);color:#fff;font-size:12px;
+    display:grid;place-items:center;flex:none;
+  }
+
+  /* ---- Form fields ---- */
+  .field-row{display:flex;flex-wrap:wrap;gap:14px}
+  .field{flex:1;min-width:200px}
+  label.lbl{display:block;font-size:13px;color:var(--ink-soft);margin-bottom:6px;font-weight:500}
+  select{
+    width:100%;padding:11px 13px;font-size:14px;font-family:inherit;
+    border:1px solid var(--line);border-radius:9px;background:#fff;color:var(--ink);
+    transition:border-color .15s, box-shadow .15s;
+  }
+  select:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
+
+  /* ---- Drop zone ---- */
+  .drop{
+    border:2px dashed var(--line);border-radius:12px;
+    padding:38px 20px;text-align:center;cursor:pointer;
+    background:#fff;transition:border-color .15s, background .15s;
+  }
+  .drop:hover,.drop.over{border-color:var(--accent);background:var(--accent-soft)}
+  .drop .icon{font-size:30px}
+  .drop .big{font-family:'Fraunces',serif;font-size:17px;margin-top:8px;color:var(--ink)}
+  .drop .small{font-size:12.5px;color:var(--ink-soft);margin-top:6px}
+  .filename{
+    margin-top:14px;font-size:13.5px;color:var(--accent-deep);font-weight:500;
+    display:none;background:var(--accent-soft);padding:9px 13px;border-radius:8px;
+  }
+
+  /* ---- Buttons ---- */
+  .btn{
+    font-family:'Spline Sans',sans-serif;font-weight:600;font-size:14.5px;
+    padding:13px 26px;border:none;border-radius:10px;cursor:pointer;
+    transition:transform .1s, background .15s, opacity .15s;
+  }
+  .btn-primary{background:var(--accent);color:#fff;width:100%}
+  .btn-primary:hover:not(:disabled){background:var(--accent-deep)}
+  .btn-primary:active:not(:disabled){transform:translateY(1px)}
+  .btn-primary:disabled{opacity:.45;cursor:not-allowed}
+  .btn-ghost{
+    background:transparent;border:1px solid var(--line);color:var(--ink-soft);
+    padding:8px 16px;font-size:13px;
+  }
+  .btn-ghost:hover{border-color:var(--accent);color:var(--accent)}
+
+  /* ---- Output ---- */
+  .out-head{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:14px}
+  .out-actions{display:flex;gap:8px}
+  textarea.out{
+    width:100%;min-height:260px;padding:16px;font-size:14.5px;
+    font-family:'Gowun Batang',serif;line-height:1.8;
+    border:1px solid var(--line);border-radius:10px;background:#fff;color:var(--ink);
+    resize:vertical;
+  }
+  textarea.out:focus{outline:none;border-color:var(--accent)}
+
+  /* ---- Status / progress ---- */
+  .status{
+    display:none;align-items:center;gap:10px;font-size:13.5px;
+    color:var(--ink-soft);margin-top:14px;
+  }
+  .status.show{display:flex}
+  .spinner{
+    width:16px;height:16px;border:2px solid var(--line);
+    border-top-color:var(--accent);border-radius:50%;
+    animation:spin .8s linear infinite;flex:none;
+  }
+  @keyframes spin{to{transform:rotate(360deg)}}
+  .errbox{
+    display:none;background:#f6e9e6;border:1px solid #e0c3bc;
+    color:var(--danger);padding:12px 14px;border-radius:9px;
+    font-size:13.5px;margin-top:14px;
+  }
+  .errbox.show{display:block}
+
+  footer{text-align:center;font-size:12px;color:var(--ink-soft);margin-top:30px;line-height:1.7}
+  .swap{
+    background:var(--accent-soft);border:1px solid var(--line);color:var(--accent);
+    width:38px;height:38px;border-radius:50%;cursor:pointer;font-size:15px;
+    align-self:flex-end;margin-bottom:1px;flex:none;transition:transform .2s;
+  }
+  .swap:hover{transform:rotate(180deg)}
+  .lang-grid{display:flex;gap:10px;align-items:flex-end}
+  @media(max-width:520px){.lang-grid{flex-wrap:wrap}.swap{order:3;margin:0 auto}}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <div class="kicker">Ministry Tools</div>
+    <h1>Document Translator<span class="ko">문서 번역기</span></h1>
+    <p class="sub">Word · PowerPoint · PDF · 텍스트 파일을 업로드하면 원하는 언어로 번역해 드립니다.</p>
+  </header>
+
+  <!-- STEP 1 — LANGUAGES -->
+  <div class="card">
+    <div class="card-label"><span class="num">1</span> 번역 언어 선택</div>
+    <div class="lang-grid">
+      <div class="field">
+        <label class="lbl" for="srclang">원본 언어 (From)</label>
+        <select id="srclang"></select>
+      </div>
+      <button class="swap" id="swapBtn" title="언어 바꾸기">⇄</button>
+      <div class="field">
+        <label class="lbl" for="tgtlang">번역할 언어 (To)</label>
+        <select id="tgtlang"></select>
+      </div>
+    </div>
+  </div>
+
+  <!-- STEP 2 — FILE -->
+  <div class="card">
+    <div class="card-label"><span class="num">2</span> 파일 업로드</div>
+    <div class="drop" id="drop">
+      <div class="icon">📄</div>
+      <div class="big">파일을 여기로 끌어다 놓거나 클릭하여 선택</div>
+      <div class="small">지원 형식: .docx · .pptx · .pdf · .txt</div>
+    </div>
+    <input type="file" id="fileInput" accept=".docx,.pptx,.pdf,.txt" style="display:none">
+    <div class="filename" id="filename"></div>
+  </div>
+
+  <!-- STEP 3 — TRANSLATE -->
+  <div class="card">
+    <div class="card-label"><span class="num">3</span> 번역 실행</div>
+    <button class="btn btn-primary" id="translateBtn" disabled>번역하기</button>
+    <div class="status" id="status"><div class="spinner"></div><span id="statusText">처리 중...</span></div>
+    <div class="errbox" id="errbox"></div>
+  </div>
+
+  <!-- OUTPUT -->
+  <div class="card" id="outCard" style="display:none">
+    <div class="out-head">
+      <div class="card-label" style="margin:0"><span class="num">✓</span> 번역 결과</div>
+      <div class="out-actions">
+        <button class="btn btn-ghost" id="copyBtn">복사</button>
+        <button class="btn btn-ghost" id="downloadBtn">.txt 다운로드</button>
+      </div>
+    </div>
+    <textarea class="out" id="output" placeholder="번역 결과가 여기에 표시됩니다..."></textarea>
+  </div>
+
+  <footer>
+    번역 엔진: Google Gemini · 문서는 저장되지 않으며 번역 즉시 처리됩니다.<br>
+    교회 청소년 사역을 위한 도구 · Built with care
+  </footer>
+
+</div>
+
+<script>
+/* ============ 언어 목록 ============ */
+const LANGS = [
+  {code:'auto', ko:'자동 감지', name:'Auto-detect'},
+  {code:'Korean',     ko:'한국어',        name:'Korean'},
+  {code:'English',    ko:'영어',          name:'English'},
+  {code:'Chinese (Simplified)', ko:'중국어(간체)', name:'Chinese (Simplified)'},
+  {code:'Chinese (Traditional)',ko:'중국어(번체)', name:'Chinese (Traditional)'},
+  {code:'Russian',    ko:'러시아어',      name:'Russian'},
+  {code:'Spanish',    ko:'스페인어',      name:'Spanish'},
+  {code:'Mongolian',  ko:'몽골어',        name:'Mongolian'},
+  {code:'Japanese',   ko:'일본어',        name:'Japanese'},
+  {code:'Vietnamese', ko:'베트남어',      name:'Vietnamese'},
+  {code:'Thai',       ko:'태국어',        name:'Thai'},
+  {code:'Indonesian', ko:'인도네시아어',  name:'Indonesian'},
+  {code:'Malay',      ko:'말레이어',      name:'Malay'},
+  {code:'Filipino (Tagalog)', ko:'필리핀어(타갈로그)', name:'Filipino'},
+  {code:'Khmer',      ko:'크메르어(캄보디아)', name:'Khmer'},
+  {code:'Lao',        ko:'라오어',        name:'Lao'},
+  {code:'Burmese',    ko:'미얀마어(버마어)', name:'Burmese'},
+];
+
+/* ============ DOM ============ */
+const $ = id => document.getElementById(id);
+const srcEl=$('srclang'), tgtEl=$('tgtlang'), swapBtn=$('swapBtn');
+const drop=$('drop'), fileInput=$('fileInput'), filenameEl=$('filename');
+const translateBtn=$('translateBtn'), statusEl=$('status'), statusText=$('statusText');
+const errbox=$('errbox'), outCard=$('outCard'), output=$('output');
+const copyBtn=$('copyBtn'), downloadBtn=$('downloadBtn');
+
+let extractedText = '';
+let currentFileName = '';
+
+/* ============ 언어 셀렉터 채우기 ============ */
+LANGS.forEach(l=>{
+  const label = l.code==='auto' ? l.ko : `${l.ko} · ${l.name}`;
+  const o1=new Option(label,l.code); srcEl.add(o1);
+  if(l.code!=='auto'){ const o2=new Option(label,l.code); tgtEl.add(o2); }
+});
+srcEl.value='auto';
+tgtEl.value='English';
+
+swapBtn.addEventListener('click',()=>{
+  if(srcEl.value==='auto'){ alert('자동 감지 상태에서는 언어를 바꿀 수 없습니다. 원본 언어를 먼저 선택하세요.'); return; }
+  const a=srcEl.value; srcEl.value=tgtEl.value; tgtEl.value=a;
+});
+
+/* ============ 파일 처리 ============ */
+drop.addEventListener('click',()=>fileInput.click());
+drop.addEventListener('dragover',e=>{e.preventDefault();drop.classList.add('over')});
+drop.addEventListener('dragleave',()=>drop.classList.remove('over'));
+drop.addEventListener('drop',e=>{
+  e.preventDefault();drop.classList.remove('over');
+  if(e.dataTransfer.files.length) handleFile(e.dataTransfer.files[0]);
+});
+fileInput.addEventListener('change',e=>{
+  if(e.target.files.length) handleFile(e.target.files[0]);
+});
+
+function showError(msg){ errbox.textContent='오류: '+msg; errbox.classList.add('show'); }
+function clearError(){ errbox.classList.remove('show'); errbox.textContent=''; }
+
+async function handleFile(file){
+  clearError();
+  outCard.style.display='none';
+  extractedText='';
+  currentFileName=file.name;
+  const ext=file.name.split('.').pop().toLowerCase();
+  filenameEl.style.display='block';
+  filenameEl.textContent='📎 '+file.name+'  (텍스트 추출 중...)';
+  updateBtn();
+
+  try{
+    if(ext==='txt'){
+      extractedText=await file.text();
+    } else if(ext==='docx'){
+      const buf=await file.arrayBuffer();
+      const res=await mammoth.extractRawText({arrayBuffer:buf});
+      extractedText=res.value;
+    } else if(ext==='pptx'){
+      extractedText=await extractPptx(file);
+    } else if(ext==='pdf'){
+      extractedText=await extractPdf(file);
+    } else {
+      throw new Error('지원하지 않는 파일 형식입니다 (.docx, .pptx, .pdf, .txt 만 가능).');
+    }
+
+    extractedText=extractedText.trim();
+    if(!extractedText){
+      throw new Error('파일에서 텍스트를 찾지 못했습니다. 스캔된 이미지 PDF는 글자 인식이 불가능합니다.');
+    }
+    filenameEl.textContent=`📎 ${file.name}  (${extractedText.length.toLocaleString()}자 추출 완료)`;
+  }catch(err){
+    filenameEl.textContent='📎 '+file.name;
+    showError(err.message||String(err));
+    extractedText='';
+  }
+  updateBtn();
+}
+
+/* ---- PPTX ---- */
+async function extractPptx(file){
+  const zip=await JSZip.loadAsync(await file.arrayBuffer());
+  const slideFiles=Object.keys(zip.files)
+    .filter(n=>/^ppt\/slides\/slide\d+\.xml$/.test(n))
+    .sort((a,b)=>(+a.match(/slide(\d+)/)[1])-(+b.match(/slide(\d+)/)[1]));
+  let out=[];
+  for(let i=0;i<slideFiles.length;i++){
+    const xml=await zip.files[slideFiles[i]].async('string');
+    const matches=xml.match(/<a:t>[^<]*<\/a:t>/g)||[];
+    const text=matches.map(m=>m.replace(/<\/?a:t>/g,'')).join(' ');
+    if(text.trim()) out.push(`[슬라이드 ${i+1}]\n${text.trim()}`);
+  }
+  return out.join('\n\n');
+}
+
+/* ---- PDF ---- */
+async function extractPdf(file){
+  pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+  const buf=await file.arrayBuffer();
+  const pdf=await pdfjsLib.getDocument({data:buf}).promise;
+  let out=[];
+  for(let p=1;p<=pdf.numPages;p++){
+    const page=await pdf.getPage(p);
+    const content=await page.getTextContent();
+    const text=content.items.map(it=>it.str).join(' ');
+    if(text.trim()) out.push(text.trim());
+  }
+  return out.join('\n\n');
+}
+
+/* ============ 버튼 활성화 ============ */
+function updateBtn(){ translateBtn.disabled = !extractedText; }
+
+/* ============ 텍스트 분할 ============ */
+function chunkText(text, size){
+  const paras=text.split(/\n\n+/);
+  const chunks=[]; let cur='';
+  for(const p of paras){
+    if((cur+'\n\n'+p).length>size && cur){ chunks.push(cur); cur=p; }
+    else { cur = cur ? cur+'\n\n'+p : p; }
+  }
+  if(cur) chunks.push(cur);
+  const final=[];
+  for(const c of chunks){
+    if(c.length<=size){ final.push(c); }
+    else { for(let i=0;i<c.length;i+=size) final.push(c.slice(i,i+size)); }
+  }
+  return final;
+}
+
+/* ============ 백엔드 호출 (Vercel 함수) ============
+   API 키는 이 코드 어디에도 없습니다. Vercel 서버가 안전하게 보관합니다. */
+async function translateChunk(text, srcLang, tgtLang){
+  const res=await fetch('/api/translate',{
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({text, srcLang, tgtLang})
+  });
+  let data={};
+  try{ data=await res.json(); }catch(e){}
+  if(!res.ok){
+    throw new Error(data.error || `서버 오류 (${res.status})`);
+  }
+  if(!data.translation || !data.translation.trim()){
+    throw new Error('번역 결과가 비어 있습니다. 다시 시도하세요.');
+  }
+  return data.translation.trim();
+}
+
+translateBtn.addEventListener('click',async()=>{
+  clearError();
+  const srcLang=srcEl.value, tgtLang=tgtEl.value;
+  if(srcLang!=='auto' && srcLang===tgtLang){
+    showError('원본 언어와 번역할 언어가 같습니다.'); return;
+  }
+
+  translateBtn.disabled=true;
+  statusEl.classList.add('show');
+  outCard.style.display='none';
+  output.value='';
+
+  try{
+    const chunks=chunkText(extractedText, 9000);
+    const results=[];
+    for(let i=0;i<chunks.length;i++){
+      statusText.textContent=`번역 중... (${i+1} / ${chunks.length} 부분)`;
+      results.push(await translateChunk(chunks[i],srcLang,tgtLang));
+    }
+    output.value=results.join('\n\n');
+    outCard.style.display='block';
+    statusText.textContent='완료';
+    outCard.scrollIntoView({behavior:'smooth',block:'start'});
+  }catch(err){
+    showError(err.message||String(err));
+  }finally{
+    statusEl.classList.remove('show');
+    translateBtn.disabled=false;
+  }
+});
+
+/* ============ 복사 / 다운로드 ============ */
+copyBtn.addEventListener('click',async()=>{
+  if(!output.value) return;
+  try{
+    await navigator.clipboard.writeText(output.value);
+    copyBtn.textContent='복사됨 ✓';
+    setTimeout(()=>copyBtn.textContent='복사',1500);
+  }catch(e){
+    output.select(); document.execCommand('copy');
+    copyBtn.textContent='복사됨 ✓';
+    setTimeout(()=>copyBtn.textContent='복사',1500);
+  }
+});
+
+downloadBtn.addEventListener('click',()=>{
+  if(!output.value) return;
+  const base=(currentFileName||'translation').replace(/\.[^.]+$/,'');
+  const blob=new Blob([output.value],{type:'text/plain;charset=utf-8'});
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(blob);
+  a.download=base+'_translated.txt';
+  a.click();
+  URL.revokeObjectURL(a.href);
+});
+</script>
+</body>
+</html>

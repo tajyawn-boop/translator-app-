@@ -1,0 +1,9 @@
+{
+  "name": "document-translator",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Document translation web app for church youth ministry. Frontend reads .docx/.pptx/.pdf/.txt files; a Vercel serverless function handles translation via the Google Gemini API with the key kept server-side.",
+  "engines": {
+    "node": ">=18.x"
+  }
+}
